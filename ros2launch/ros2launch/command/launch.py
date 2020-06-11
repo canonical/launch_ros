@@ -17,7 +17,7 @@ import os
 from ament_index_python.packages import get_package_prefix
 from ament_index_python.packages import PackageNotFoundError
 try:
-    from argcomplete.completers import FilesCompleter
+    from argcomplete.completers import DirectoriesCompleter, FilesCompleter
 except ImportError:
     # argcomplete is optional
     pass
@@ -34,6 +34,7 @@ from ros2launch.api import LaunchFileNameCompleter
 from ros2launch.api import MultipleLaunchFilesError
 from ros2launch.api import print_a_launch_file
 from ros2launch.api import print_arguments_of_launch_file
+from ros2launch.api import setup_security
 from ros2pkg.api import package_name_completer
 
 
@@ -63,7 +64,6 @@ def package_name_or_launch_file_completer(prefix, parsed_args, **kwargs):
     except NameError:
         # argcomplete is optional
         pass
-
     return completions
 
 
@@ -102,6 +102,17 @@ class LaunchCommand(CommandExtension):
             nargs='*',
             help="Arguments to the launch file; '<name>:=<value>' (for duplicates, last one wins)")
         arg.completer = SuppressCompleterWorkaround()
+
+        arg = parser.add_argument(
+            '--secure',
+            metavar='keystore',
+            help=('Launch node with encryption using specified keystore dir.'
+                  'Will generate keys if necessary.'),
+        )
+        try:
+            arg.completer = DirectoriesCompleter()  # argcomplete is optional
+        except NameError:
+            pass
 
     def main(self, *, parser, args):
         """Entry point for CLI program."""
@@ -145,6 +156,12 @@ class LaunchCommand(CommandExtension):
         else:
             raise RuntimeError('unexpected mode')
         launch_arguments.extend(args.launch_arguments)
+
+        if args.secure:
+            setup_security(
+                keystore_dir=args.secure, package_name=args.package_name
+            )
+
         if args.show_all_subprocesses_output:
             os.environ['OVERRIDE_LAUNCH_PROCESS_OUTPUT'] = 'both'
         if args.print:

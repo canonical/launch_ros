@@ -53,8 +53,12 @@ from launch_ros.utilities import normalize_parameters
 from launch_ros.utilities import normalize_remap_rules
 from launch_ros.utilities import prefix_namespace
 
+import nodl
+
 from rclpy.validate_namespace import validate_namespace
 from rclpy.validate_node_name import validate_node_name
+
+import sros2.api._key
 
 import yaml
 
@@ -201,6 +205,13 @@ class Node(ExecuteProcess):
             normalized_params = normalize_parameters(parameters)
         # Forward 'exec_name' as to ExecuteProcess constructor
         kwargs['name'] = exec_name
+        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
+            cmd += [
+                '--enclave',
+                LocalSubstitution(
+                    "ros_specific_arguments['enclave']", description='node security enclave'
+                ),
+            ]
         super().__init__(cmd=cmd, **kwargs)
         self.__package = package
         self.__node_executable = executable
@@ -434,6 +445,22 @@ class Node(ExecuteProcess):
                 cmd_extension.extend(['-r', f'{src}:={dst}'])
             self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
 
+    def _secure_self(self, ros_specific_arguments: Dict[str, Union[str, List[str]]]):
+        node = nodl.get_node_by_executable(
+            package_name=self.__package, executable_name=self.__node_executable
+        )
+
+        node.name = self.node_name.replace('<node_name_unspecified>', node.name)
+        try:
+            keystore_dir = os.environ['ROS_SECURITY_KEYSTORE']
+        except KeyError as exc:
+            raise RuntimeError('ROS_SECURITY_KEYSTORE environment variable is not set') from exc
+
+        if not sros2.api._key.create_key(keystore_path=keystore_dir, identity=node.name):
+            raise RuntimeError(f'unable to secure node with ROS_SECURITY_KEYSTORE={keystore_dir}')
+
+        ros_specific_arguments['enclave'] = node.name
+
     def execute(self, context: LaunchContext) -> Optional[List[Action]]:
         """
         Execute the action.
@@ -444,6 +471,8 @@ class Node(ExecuteProcess):
         # Prepare the ros_specific_arguments list and add it to the context so that the
         # LocalSubstitution placeholders added to the the cmd can be expanded using the contents.
         ros_specific_arguments: Dict[str, Union[str, List[str]]] = {}
+        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
+            self._secure_self(ros_specific_arguments)
         if self.__node_name is not None:
             ros_specific_arguments['name'] = '__node:={}'.format(self.__expanded_node_name)
         if self.__expanded_node_namespace != '':
