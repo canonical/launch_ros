@@ -446,20 +446,23 @@ class Node(ExecuteProcess):
             self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
 
     def _secure_self(self, ros_specific_arguments: Dict[str, Union[str, List[str]]]):
-        node = nodl.get_node_by_executable(
+        """Enable encryption, creating a key for the node if necessary."""
+        nodl_node = nodl.get_node_by_executable(
             package_name=self.__package, executable_name=self.__node_executable
         )
 
-        node.name = self.node_name.replace('<node_name_unspecified>', node.name)
+        resolved_node_name = self.node_name.replace(
+            Node.UNSPECIFIED_NODE_NAME, nodl_node.name
+        ).replace(Node.UNSPECIFIED_NODE_NAMESPACE, '')
         try:
             keystore_dir = os.environ['ROS_SECURITY_KEYSTORE']
         except KeyError as exc:
             raise RuntimeError('ROS_SECURITY_KEYSTORE environment variable is not set') from exc
 
-        if not sros2.api._key.create_key(keystore_path=keystore_dir, identity=node.name):
-            raise RuntimeError(f'unable to secure node with ROS_SECURITY_KEYSTORE={keystore_dir}')
+        if not sros2.api._key.create_key(keystore_path=keystore_dir, identity=resolved_node_name):
+            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={keystore_dir}')
 
-        ros_specific_arguments['enclave'] = node.name
+        ros_specific_arguments['enclave'] = resolved_node_name
 
     def execute(self, context: LaunchContext) -> Optional[List[Action]]:
         """
@@ -471,12 +474,12 @@ class Node(ExecuteProcess):
         # Prepare the ros_specific_arguments list and add it to the context so that the
         # LocalSubstitution placeholders added to the the cmd can be expanded using the contents.
         ros_specific_arguments: Dict[str, Union[str, List[str]]] = {}
-        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
-            self._secure_self(ros_specific_arguments)
         if self.__node_name is not None:
             ros_specific_arguments['name'] = '__node:={}'.format(self.__expanded_node_name)
         if self.__expanded_node_namespace != '':
             ros_specific_arguments['ns'] = '__ns:={}'.format(self.__expanded_node_namespace)
+        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
+            self._secure_self(ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
         ret = super().execute(context)
 
