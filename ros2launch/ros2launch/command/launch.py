@@ -106,6 +106,8 @@ class LaunchCommand(CommandExtension):
         arg = parser.add_argument(
             '--secure',
             metavar='keystore',
+            nargs='?',
+            const='',
             help=('Launch node with encryption using specified keystore dir.'
                   'Will generate keys if necessary.'),
         )
@@ -157,7 +159,7 @@ class LaunchCommand(CommandExtension):
             raise RuntimeError('unexpected mode')
         launch_arguments.extend(args.launch_arguments)
 
-        if args.secure:
+        if args.secure is not None:
             setup_security(
                 keystore_dir=args.secure, package_name=args.package_name
             )

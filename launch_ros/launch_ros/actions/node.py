@@ -17,6 +17,7 @@
 import os
 import pathlib
 from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -59,6 +60,7 @@ from rclpy.validate_namespace import validate_namespace
 from rclpy.validate_node_name import validate_node_name
 
 import sros2.api._key
+import sros2.api._keystore
 
 import yaml
 
@@ -230,6 +232,8 @@ class Node(ExecuteProcess):
         self.__substitutions_performed = False
 
         self.__logger = launch.logging.get_logger(__name__)
+
+        self.__keystore_tempdir = None
 
     @staticmethod
     def parse_nested_parameters(params, parser):
@@ -454,13 +458,20 @@ class Node(ExecuteProcess):
         resolved_node_name = self.node_name.replace(
             Node.UNSPECIFIED_NODE_NAME, nodl_node.name
         ).replace(Node.UNSPECIFIED_NODE_NAMESPACE, '')
-        try:
-            keystore_dir = os.environ['ROS_SECURITY_KEYSTORE']
-        except KeyError as exc:
-            raise RuntimeError('ROS_SECURITY_KEYSTORE environment variable is not set') from exc
 
-        if not sros2.api._key.create_key(keystore_path=keystore_dir, identity=resolved_node_name):
-            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={keystore_dir}')
+        keystore_path = os.environ['ROS_SECURITY_KEYSTORE']
+
+        # If keystore path is blank, create a transient keystore
+        if not keystore_path:
+            self.__keystore_tempdir = TemporaryDirectory()
+            keystore_path = self.__keystore_tempdir.name
+            os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
+
+        if not sros2.api._keystore.is_valid_keystore(keystore_path):
+            sros2.api._keystore.create_keystore(keystore_path=keystore_path)
+
+        if not sros2.api._key.create_key(keystore_path=keystore_path, identity=resolved_node_name):
+            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={keystore_path}')
 
         ros_specific_arguments['enclave'] = resolved_node_name
 

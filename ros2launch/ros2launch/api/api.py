@@ -24,7 +24,6 @@ from ament_index_python.packages import PackageNotFoundError
 import launch
 from launch.frontend import Parser
 from launch.launch_description_sources import get_launch_description_from_any_launch_file
-import sros2.api._keystore
 
 
 class MultipleLaunchFilesError(Exception):
@@ -160,8 +159,7 @@ def launch_a_launch_file(*, launch_file_path, launch_file_arguments, debug=False
 
 
 def setup_security(*, keystore_dir: str, package_name: str):
-    keystore_path = Path(keystore_dir).resolve()
-    sros2.api._keystore.create_keystore(str(keystore_path))
+    keystore_path = Path(keystore_dir).resolve() if keystore_dir else ''
 
     os.environ['ROS_SECURITY_KEYSTORE'] = str(keystore_path)
     os.environ['ROS_SECURITY_ENABLE'] = 'true'
