@@ -233,8 +233,6 @@ class Node(ExecuteProcess):
 
         self.__logger = launch.logging.get_logger(__name__)
 
-        self.__keystore_tempdir = None
-
     @staticmethod
     def parse_nested_parameters(params, parser):
         """Normalize parameters as expected by Node constructor argument."""
@@ -449,7 +447,9 @@ class Node(ExecuteProcess):
                 cmd_extension.extend(['-r', f'{src}:={dst}'])
             self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
 
-    def _secure_self(self, ros_specific_arguments: Dict[str, Union[str, List[str]]]):
+    def _secure_self(
+        self, context: LaunchContext, ros_specific_arguments: Dict[str, Union[str, List[str]]]
+    ):
         """Enable encryption, creating a key for the node if necessary."""
         nodl_node = nodl.get_node_by_executable(
             package_name=self.__package, executable_name=self.__node_executable
@@ -463,8 +463,9 @@ class Node(ExecuteProcess):
 
         # If keystore path is blank, create a transient keystore
         if not keystore_path:
-            self.__keystore_tempdir = TemporaryDirectory()
-            keystore_path = self.__keystore_tempdir.name
+            transient_keystore = TemporaryDirectory()
+            keystore_path = transient_keystore.name
+            context.extend_globals({'transient_keystore': transient_keystore})
             os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
 
         if not sros2.api._keystore.is_valid_keystore(keystore_path):
@@ -490,7 +491,7 @@ class Node(ExecuteProcess):
         if self.__expanded_node_namespace != '':
             ros_specific_arguments['ns'] = '__ns:={}'.format(self.__expanded_node_namespace)
         if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
-            self._secure_self(ros_specific_arguments)
+            self._secure_self(context, ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
         ret = super().execute(context)
 
