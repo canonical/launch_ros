@@ -103,7 +103,8 @@ class LaunchCommand(CommandExtension):
             help="Arguments to the launch file; '<name>:=<value>' (for duplicates, last one wins)")
         arg.completer = SuppressCompleterWorkaround()
 
-        arg = parser.add_argument(
+        sec_args = parser.add_argument_group(title='Security', description='Security related arguments')
+        arg = sec_args.add_argument(
             '--secure',
             metavar='keystore',
             nargs='?',
@@ -115,6 +116,12 @@ class LaunchCommand(CommandExtension):
             arg.completer = DirectoriesCompleter()  # argcomplete is optional
         except NameError:
             pass
+        sec_args.add_argument(
+            '--no-create-keystore',
+            metavar='no_create',
+            action='store_true',
+            help='disable creating keystore automatically'
+        )
 
     def main(self, *, parser, args):
         """Entry point for CLI program."""
@@ -163,6 +170,9 @@ class LaunchCommand(CommandExtension):
             setup_security(
                 keystore_dir=args.secure, package_name=args.package_name
             )
+            launch_arguments.append('__secure:=true')
+            if args.no_create:
+                launch_arguments.append('__no_keystore_gen:=true')
 
         if args.show_all_subprocesses_output:
             os.environ['OVERRIDE_LAUNCH_PROCESS_OUTPUT'] = 'both'

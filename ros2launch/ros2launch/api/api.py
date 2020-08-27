@@ -159,9 +159,7 @@ def launch_a_launch_file(*, launch_file_path, launch_file_arguments, debug=False
 
 
 def setup_security(*, keystore_dir: str, package_name: str):
-    keystore_path = Path(keystore_dir).resolve() if keystore_dir else ''
-
-    os.environ['ROS_SECURITY_KEYSTORE'] = str(keystore_path)
+    os.environ['ROS_SECURITY_KEYSTORE'] = str(Path(keystore_dir).resolve()) if keystore_dir else ''
     os.environ['ROS_SECURITY_ENABLE'] = 'true'
     os.environ['ROS_SECURITY_STRATEGY'] = 'Enforce'
 

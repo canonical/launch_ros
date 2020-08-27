@@ -207,13 +207,6 @@ class Node(ExecuteProcess):
             normalized_params = normalize_parameters(parameters)
         # Forward 'exec_name' as to ExecuteProcess constructor
         kwargs['name'] = exec_name
-        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
-            cmd += [
-                '--enclave',
-                LocalSubstitution(
-                    "ros_specific_arguments['enclave']", description='node security enclave'
-                ),
-            ]
         super().__init__(cmd=cmd, **kwargs)
         self.__package = package
         self.__node_executable = executable
@@ -228,6 +221,8 @@ class Node(ExecuteProcess):
         self.__expanded_parameter_arguments = None  # type: Optional[List[Tuple[Text, bool]]]
         self.__final_node_name = None  # type: Optional[Text]
         self.__expanded_remappings = None  # type: Optional[List[Tuple[Text, Text]]]
+        self.__enclave: Optional[Text] = None
+        self.__keystore_path: Optional[Text] = None
 
         self.__substitutions_performed = False
 
@@ -395,6 +390,9 @@ class Node(ExecuteProcess):
             raise
         self.__final_node_name = prefix_namespace(
             self.__expanded_node_namespace, self.__expanded_node_name)
+        if context.launch_configurations.get('__secure', None) is not None:
+            cmd_extension = ['--enclave', LocalSubstitution("ros_specific_arguments['enclave']")]
+            self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
         # expand global parameters first,
         # so they can be overriden with specific parameters of this Node
         global_params = context.launch_configurations.get('ros_params', None)
@@ -455,26 +453,36 @@ class Node(ExecuteProcess):
             package_name=self.__package, executable_name=self.__node_executable
         )
 
-        resolved_node_name = self.node_name.replace(
+        self.__enclave = self.node_name.replace(
             Node.UNSPECIFIED_NODE_NAME, nodl_node.name
         ).replace(Node.UNSPECIFIED_NODE_NAMESPACE, '')
 
-        keystore_path = os.environ['ROS_SECURITY_KEYSTORE']
+        self.__keystore_path = os.environ.get('ROS_SECURITY_KEYSTORE', None)
 
-        # If keystore path is blank, create a transient keystore
-        if not keystore_path:
-            transient_keystore = TemporaryDirectory()
-            keystore_path = transient_keystore.name
-            context.extend_globals({'transient_keystore': transient_keystore})
-            os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
+        if not context.launch_configurations.get('__no_create_keystore', None):
+            # If keystore path is blank, create a transient keystore
+            if not self.__keystore_path:
+                self.__keystore_path = self._create_transient_keystore(context)
 
-        if not sros2.api._keystore.is_valid_keystore(keystore_path):
-            sros2.api._keystore.create_keystore(keystore_path=keystore_path)
+            # If keystore is not initialized, create a keystore
+            if not sros2.api._keystore.is_valid_keystore(self.__keystore_path):
+                # Create a directory if it doesn't already exist
+                if not pathlib.Path(self.__keystore_path).is_dir():
+                    pathlib.Path(self.__keystore_path).mkdir()
+                sros2.api._keystore.create_keystore(self.__keystore_path)
 
-        if not sros2.api._key.create_key(keystore_path=keystore_path, identity=resolved_node_name):
-            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={keystore_path}')
+        if not sros2.api._key.create_key(keystore_path=self.__keystore_path, identity=self.__enclave):
+            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={self.__keystore_path}')
 
-        ros_specific_arguments['enclave'] = resolved_node_name
+        ros_specific_arguments['enclave'] = self.__enclave
+
+    def _create_transient_keystore(self, context: LaunchContext):
+        transient_keystore = TemporaryDirectory()
+        keystore_path = transient_keystore.name
+        # add the directory itself to context, so it persists across launch files
+        context.extend_globals({'transient_keystore': transient_keystore})
+        os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
+        return keystore_path
 
     def execute(self, context: LaunchContext) -> Optional[List[Action]]:
         """
@@ -490,7 +498,7 @@ class Node(ExecuteProcess):
             ros_specific_arguments['name'] = '__node:={}'.format(self.__expanded_node_name)
         if self.__expanded_node_namespace != '':
             ros_specific_arguments['ns'] = '__ns:={}'.format(self.__expanded_node_namespace)
-        if os.environ.get('ROS_SECURITY_ENABLE') == 'true':
+        if context.launch_configurations.get('__secure', None):
             self._secure_self(context, ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
         ret = super().execute(context)
