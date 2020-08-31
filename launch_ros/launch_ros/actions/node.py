@@ -471,8 +471,12 @@ class Node(ExecuteProcess):
                     pathlib.Path(self.__keystore_path).mkdir()
                 sros2.api._keystore.create_keystore(self.__keystore_path)
 
-        if not sros2.api._key.create_key(keystore_path=self.__keystore_path, identity=self.__enclave):
-            raise RuntimeError(f'Unable to secure node with ROS_SECURITY_KEYSTORE={self.__keystore_path}')
+        if not sros2.api._key.create_key(
+            keystore_path=self.__keystore_path, identity=self.__enclave
+        ):
+            raise RuntimeError(
+                f'Unable to secure node with ROS_SECURITY_KEYSTORE={self.__keystore_path}'
+            )
 
         ros_specific_arguments['enclave'] = self.__enclave
 
