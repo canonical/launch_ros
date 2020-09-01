@@ -17,6 +17,7 @@
   <depend>python3-yaml</depend>
   <depend>composition_interfaces</depend>
   <depend>nodl_python</depend>
+  <depend>sros2</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
