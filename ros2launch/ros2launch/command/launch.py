@@ -103,14 +103,14 @@ class LaunchCommand(CommandExtension):
             help="Arguments to the launch file; '<name>:=<value>' (for duplicates, last one wins)")
         arg.completer = SuppressCompleterWorkaround()
 
-        sec_args = parser.add_argument_group(title='Security', description='Security related arguments')
+        sec_args = parser.add_argument_group(title='Security', description='Security related args')
         arg = sec_args.add_argument(
             '--secure',
             metavar='keystore',
             nargs='?',
             const='',
-            help=('Launch node with encryption using specified keystore dir.'
-                  'Will generate keys if necessary.'),
+            help=('Launch using ROS 2 security features using specified keystore dir.'
+                  'Will set up a keystore if one is not specified.'),
         )
         try:
             arg.completer = DirectoriesCompleter()  # argcomplete is optional
@@ -120,7 +120,7 @@ class LaunchCommand(CommandExtension):
             '--no-create-keystore',
             metavar='no_create',
             action='store_true',
-            help='disable creating keystore automatically'
+            help='Disable creating keystore automatically'
         )
 
     def main(self, *, parser, args):

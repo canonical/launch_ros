@@ -221,8 +221,8 @@ class Node(ExecuteProcess):
         self.__expanded_parameter_arguments = None  # type: Optional[List[Tuple[Text, bool]]]
         self.__final_node_name = None  # type: Optional[Text]
         self.__expanded_remappings = None  # type: Optional[List[Tuple[Text, Text]]]
-        self.__enclave: Optional[Text] = None
-        self.__keystore_path: Optional[Text] = None
+        self.__enclave = None  # type: Optional[Text]
+        self.__keystore_path = None  # type: Optional[Text]
 
         self.__substitutions_performed = False
 
@@ -459,17 +459,23 @@ class Node(ExecuteProcess):
 
         self.__keystore_path = os.environ.get('ROS_SECURITY_KEYSTORE', None)
 
-        if not context.launch_configurations.get('__no_create_keystore', None):
-            # If keystore path is blank, create a transient keystore
-            if not self.__keystore_path:
-                self.__keystore_path = self._create_transient_keystore(context)
+        if not(sros2.api._keystore.is_valid_keystore(self.__keystore_path)):
+            if not context.launch_configurations.get('__no_create_keystore', None):
+                # If keystore path is blank, create a transient keystore
+                if not self.__keystore_path:
+                    self.__keystore_path = self._create_transient_keystore(context)
 
-            # If keystore is not initialized, create a keystore
-            if not sros2.api._keystore.is_valid_keystore(self.__keystore_path):
-                # Create a directory if it doesn't already exist
+                # If keystore is not initialized, create a keystore
                 if not pathlib.Path(self.__keystore_path).is_dir():
                     pathlib.Path(self.__keystore_path).mkdir()
                 sros2.api._keystore.create_keystore(self.__keystore_path)
+            else:
+                if not self.__keystore_path:
+                    raise RuntimeError('--no-create-keystore enabled, but no keystore specified!')
+                else:
+                    raise RuntimeError(('--no-create-keystore was specified and '
+                                        f'ROS_SECURITY_KEYSTORE="{self.__keystore_path}" '
+                                        'is not a valid keystore'))
 
         if not sros2.api._key.create_key(
             keystore_path=self.__keystore_path, identity=self.__enclave
