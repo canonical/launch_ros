@@ -167,9 +167,7 @@ class LaunchCommand(CommandExtension):
         launch_arguments.extend(args.launch_arguments)
 
         if args.secure is not None:
-            setup_security(
-                keystore_dir=args.secure, package_name=args.package_name
-            )
+            setup_security(keystore_dir=args.secure)
             launch_arguments.append('__secure:=true')
             if args.no_create:
                 launch_arguments.append('__no_keystore_gen:=true')

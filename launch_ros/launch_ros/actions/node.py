@@ -445,7 +445,7 @@ class Node(ExecuteProcess):
                 cmd_extension.extend(['-r', f'{src}:={dst}'])
             self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
 
-    def _secure_self(
+    def _setup_security(
         self, context: LaunchContext, ros_specific_arguments: Dict[str, Union[str, List[str]]]
     ):
         """Enable encryption, creating a key for the node if necessary."""
@@ -481,7 +481,7 @@ class Node(ExecuteProcess):
             keystore_path=self.__keystore_path, identity=self.__enclave
         ):
             raise RuntimeError(
-                f'Unable to secure node with ROS_SECURITY_KEYSTORE={self.__keystore_path}'
+                f'Failed to create key in ROS_SECURITY_KEYSTORE={self.__keystore_path}'
             )
 
         ros_specific_arguments['enclave'] = self.__enclave
@@ -490,6 +490,7 @@ class Node(ExecuteProcess):
         transient_keystore = TemporaryDirectory()
         keystore_path = transient_keystore.name
         # add the directory itself to context, so it persists across launch files
+        # and can be cleaned up later
         context.extend_globals({'transient_keystore': transient_keystore})
         os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
         return keystore_path
@@ -509,7 +510,7 @@ class Node(ExecuteProcess):
         if self.__expanded_node_namespace != '':
             ros_specific_arguments['ns'] = '__ns:={}'.format(self.__expanded_node_namespace)
         if context.launch_configurations.get('__secure', None):
-            self._secure_self(context, ros_specific_arguments)
+            self._setup_security(context, ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
         ret = super().execute(context)
 
