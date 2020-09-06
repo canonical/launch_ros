@@ -34,7 +34,6 @@ from ros2launch.api import LaunchFileNameCompleter
 from ros2launch.api import MultipleLaunchFilesError
 from ros2launch.api import print_a_launch_file
 from ros2launch.api import print_arguments_of_launch_file
-from ros2launch.api import setup_security
 from ros2pkg.api import package_name_completer
 
 
@@ -118,7 +117,6 @@ class LaunchCommand(CommandExtension):
             pass
         sec_args.add_argument(
             '--no-create-keystore',
-            metavar='no_create',
             action='store_true',
             help='Disable creating keystore automatically'
         )
@@ -167,10 +165,14 @@ class LaunchCommand(CommandExtension):
         launch_arguments.extend(args.launch_arguments)
 
         if args.secure is not None:
-            setup_security(keystore_dir=args.secure)
             launch_arguments.append('__secure:=true')
-            if args.no_create:
+            if args.secure:
+                launch_arguments.append(f'__keystore:={args.secure}')
+            if args.no_create_keystore:
                 launch_arguments.append('__no_keystore_gen:=true')
+                if args.secure == '':
+                    # Secure was specified, but no keystore arg followed
+                    raise RuntimeError('--no-create-keystore was specified without a keystore')
 
         if args.show_all_subprocesses_output:
             os.environ['OVERRIDE_LAUNCH_PROCESS_OUTPUT'] = 'both'

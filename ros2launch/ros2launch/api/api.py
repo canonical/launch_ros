@@ -16,7 +16,6 @@
 
 from collections import OrderedDict
 import os
-from pathlib import Path
 from typing import List, Text, Tuple
 
 from ament_index_python.packages import get_package_share_directory
@@ -156,12 +155,6 @@ def launch_a_launch_file(*, launch_file_path, launch_file_arguments, debug=False
     launch_service.include_launch_description(launch_description)
     ret = launch_service.run()
     return ret
-
-
-def setup_security(*, keystore_dir: str):
-    os.environ['ROS_SECURITY_KEYSTORE'] = str(Path(keystore_dir).resolve()) if keystore_dir else ''
-    os.environ['ROS_SECURITY_ENABLE'] = 'true'
-    os.environ['ROS_SECURITY_STRATEGY'] = 'Enforce'
 
 
 class LaunchFileNameCompleter:

@@ -25,7 +25,6 @@ from .api import MultipleLaunchFilesError
 from .api import print_a_launch_file
 from .api import print_arguments_of_launch_description
 from .api import print_arguments_of_launch_file
-from .api import setup_security
 
 
 __all__ = [
@@ -39,5 +38,4 @@ __all__ = [
     'print_a_launch_file',
     'print_arguments_of_launch_description',
     'print_arguments_of_launch_file',
-    'setup_security',
 ]

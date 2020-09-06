@@ -30,6 +30,7 @@ import warnings
 
 from launch.action import Action
 from launch.actions import ExecuteProcess
+from launch.actions import SetEnvironmentVariable
 from launch.frontend import Entity
 from launch.frontend import expose_action
 from launch.frontend import Parser
@@ -222,7 +223,7 @@ class Node(ExecuteProcess):
         self.__final_node_name = None  # type: Optional[Text]
         self.__expanded_remappings = None  # type: Optional[List[Tuple[Text, Text]]]
         self.__enclave = None  # type: Optional[Text]
-        self.__keystore_path = None  # type: Optional[Text]
+        self.__child_actions = []  # type: List[Action]
 
         self.__substitutions_performed = False
 
@@ -445,6 +446,32 @@ class Node(ExecuteProcess):
                 cmd_extension.extend(['-r', f'{src}:={dst}'])
             self.cmd.extend([normalize_to_list_of_substitutions(x) for x in cmd_extension])
 
+    def _setup_keystore(self, context: LaunchContext):
+        """Generate a keystore if necessary, otherwise fetch existing keystore from context."""
+        try:
+            keystore_path = context.locals.keystore
+        except AttributeError:
+            keystore_path = context.launch_configurations.get('__keystore', None)
+
+        if not keystore_path or not sros2.api._keystore.is_valid_keystore(keystore_path):
+            if not context.launch_configurations.get('__no_create_keystore', None):
+                # If keystore path is blank, create a transient keystore
+                if not keystore_path:
+                    keystore_path = self._create_transient_keystore(context)
+
+                # If keystore is not initialized, create a keystore
+                if not pathlib.Path(keystore_path).is_dir():
+                    pathlib.Path(keystore_path).mkdir()
+                sros2.api._keystore.create_keystore(keystore_path)
+            else:
+                if not keystore_path:
+                    raise RuntimeError('--no-create-keystore enabled, but no keystore specified!')
+                else:
+                    raise RuntimeError(('--no-create-keystore was specified and '
+                                        f'ROS_SECURITY_KEYSTORE="{keystore_path}" '
+                                        'is not a valid keystore'))
+            context.extend_globals({'keystore': keystore_path})
+
     def _setup_security(
         self, context: LaunchContext, ros_specific_arguments: Dict[str, Union[str, List[str]]]
     ):
@@ -457,45 +484,37 @@ class Node(ExecuteProcess):
             Node.UNSPECIFIED_NODE_NAME, nodl_node.name
         ).replace(Node.UNSPECIFIED_NODE_NAMESPACE, '')
 
-        self.__keystore_path = os.environ.get('ROS_SECURITY_KEYSTORE', None)
-
-        if not(sros2.api._keystore.is_valid_keystore(self.__keystore_path)):
-            if not context.launch_configurations.get('__no_create_keystore', None):
-                # If keystore path is blank, create a transient keystore
-                if not self.__keystore_path:
-                    self.__keystore_path = self._create_transient_keystore(context)
-
-                # If keystore is not initialized, create a keystore
-                if not pathlib.Path(self.__keystore_path).is_dir():
-                    pathlib.Path(self.__keystore_path).mkdir()
-                sros2.api._keystore.create_keystore(self.__keystore_path)
-            else:
-                if not self.__keystore_path:
-                    raise RuntimeError('--no-create-keystore enabled, but no keystore specified!')
-                else:
-                    raise RuntimeError(('--no-create-keystore was specified and '
-                                        f'ROS_SECURITY_KEYSTORE="{self.__keystore_path}" '
-                                        'is not a valid keystore'))
+        self._setup_keystore(context)
 
         if not sros2.api._key.create_key(
-            keystore_path=self.__keystore_path, identity=self.__enclave
+            keystore_path=context.locals.keystore, identity=self.__enclave
         ):
             raise RuntimeError(
-                f'Failed to create key in ROS_SECURITY_KEYSTORE={self.__keystore_path}'
+                f'Failed to create key in ROS_SECURITY_KEYSTORE={context.locals.keystore}'
             )
 
         ros_specific_arguments['enclave'] = self.__enclave
 
-    def _create_transient_keystore(self, context: LaunchContext):
+        self.__child_actions.append(
+            SetEnvironmentVariable(
+                name='ROS_SECURITY_KEYSTORE', value=LocalSubstitution(expression='keystore')
+            )
+        )
+        self.__child_actions.append(
+            SetEnvironmentVariable(name='ROS_SECURITY_STRATEGY', value='Enforce')
+        )
+        self.__child_actions.append(
+            SetEnvironmentVariable(name='ROS_SECURITY_ENABLE', value='true')
+        )
+
+    def _create_transient_keystore(self, context: LaunchContext) -> pathlib.Path:
         transient_keystore = TemporaryDirectory()
-        keystore_path = transient_keystore.name
         # add the directory itself to context, so it persists across launch files
         # and can be cleaned up later
         context.extend_globals({'transient_keystore': transient_keystore})
-        os.environ['ROS_SECURITY_KEYSTORE'] = keystore_path
-        return keystore_path
+        return transient_keystore.name
 
-    def execute(self, context: LaunchContext) -> Optional[List[Action]]:
+    def execute(self, context: LaunchContext) -> List[Action]:
         """
         Execute the action.
 
@@ -512,7 +531,7 @@ class Node(ExecuteProcess):
         if context.launch_configurations.get('__secure', None):
             self._setup_security(context, ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
-        ret = super().execute(context)
+        super().execute(context)
 
         if self.is_node_name_fully_specified():
             add_node_name(context, self.node_name)
@@ -524,7 +543,7 @@ class Node(ExecuteProcess):
                     'launch context'.format(node_name_count, self.node_name)
                 )
 
-        return ret
+        return self.__child_actions
 
     @property
     def expanded_node_namespace(self):
