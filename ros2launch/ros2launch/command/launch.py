@@ -117,7 +117,8 @@ class LaunchCommand(CommandExtension):
             pass
         sec_args.add_argument(
             '--no-create-keystore',
-            action='store_true',
+            dest='create_keystore',
+            action='store_false',
             help='Disable creating keystore automatically'
         )
 
@@ -166,14 +167,6 @@ class LaunchCommand(CommandExtension):
 
         if args.secure is not None:
             launch_arguments.append('__secure:=true')
-            if args.secure:
-                launch_arguments.append(f'__keystore:={args.secure}')
-            if args.no_create_keystore:
-                launch_arguments.append('__no_keystore_gen:=true')
-                if args.secure == '':
-                    # Secure was specified, but no keystore arg followed
-                    raise RuntimeError('--no-create-keystore was specified without a keystore')
-
         if args.show_all_subprocesses_output:
             os.environ['OVERRIDE_LAUNCH_PROCESS_OUTPUT'] = 'both'
         if args.print:
@@ -184,5 +177,7 @@ class LaunchCommand(CommandExtension):
             return launch_a_launch_file(
                 launch_file_path=path,
                 launch_file_arguments=launch_arguments,
-                debug=args.debug
+                debug=args.debug,
+                secure=args.secure,
+                create_keystore=args.create_keystore
             )
