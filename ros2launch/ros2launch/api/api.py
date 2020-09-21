@@ -18,7 +18,10 @@ from collections import OrderedDict
 import os
 import pathlib
 from tempfile import TemporaryDirectory
-from typing import List, Text, Tuple, Union
+from typing import List
+from typing import Text
+from typing import Tuple
+from typing import Union
 
 from ament_index_python.packages import get_package_share_directory
 from ament_index_python.packages import PackageNotFoundError
