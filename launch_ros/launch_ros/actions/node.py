@@ -444,7 +444,7 @@ class Node(ExecuteProcess):
 
     def _setup_security(
         self, context: LaunchContext, ros_specific_arguments: Dict[str, Union[str, List[str]]]
-    ):
+    ) -> None:
         """Enable encryption, creating a key for the node if necessary."""
         nodl_node = nodl.get_node_by_executable(
             package_name=self.__package, executable_name=self.__node_executable
@@ -478,7 +478,7 @@ class Node(ExecuteProcess):
         if context.launch_configurations.get('__secure', None):
             self._setup_security(context, ros_specific_arguments)
         context.extend_locals({'ros_specific_arguments': ros_specific_arguments})
-        super().execute(context)
+        ret = super().execute(context)
 
         if self.is_node_name_fully_specified():
             add_node_name(context, self.node_name)
@@ -490,7 +490,7 @@ class Node(ExecuteProcess):
                     'launch context'.format(node_name_count, self.node_name)
                 )
 
-        return None
+        return ret
 
     @property
     def expanded_node_namespace(self):
