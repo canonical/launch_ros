@@ -21,7 +21,6 @@ from tempfile import TemporaryDirectory
 from typing import List
 from typing import Text
 from typing import Tuple
-from typing import Union
 
 from ament_index_python.packages import get_package_share_directory
 from ament_index_python.packages import PackageNotFoundError
@@ -51,19 +50,19 @@ class NoKeystoreProvidedError(Exception):
 class NonexistantKeystoreError(Exception):
     """Exception raised when keystore is not on disk."""
 
-    def __init__(self, keystore_path):
+    def __init__(self, keystore_path: pathlib.Path):
         super().__init__(('--no-create-keystore was specified and '
-                          f'ROS_SECURITY_KEYSTORE="{keystore_path}" '
+                          f'the keystore "{keystore_path}" '
                           'does not exist'))
 
 
 class InvalidKeystoreError(Exception):
     """Exception raised when provided keystore isn't valid."""
 
-    def __init__(self, keystore_path):
+    def __init__(self, keystore_path: pathlib.Path):
         super().__init__(('--no-create-keystore was specified and '
-                          f'ROS_SECURITY_KEYSTORE="{keystore_path}" '
-                          'is not a valid keystore'))
+                          f'the keystore "{keystore_path}" is not initialized. \n\t'
+                          f'(Try running: ros2 security create_keystore {keystore_path})'))
 
 
 def get_share_file_path_from_package(*, package_name, file_name):
@@ -190,7 +189,7 @@ def launch_a_launch_file(
         # declare keystore so if it is a TemporaryDirectory, it gets cleaned up when out of scope
         keystore, launch_description = _setup_security(  # noqa: F841
             launch_description=launch_description,
-            keystore_path=secure,
+            keystore_dir=secure,
             create_keystore=create_keystore,
         )
     launch_service.include_launch_description(launch_description)
@@ -199,12 +198,18 @@ def launch_a_launch_file(
 
 
 def _setup_security(
-    *, launch_description: launch.LaunchDescription, keystore_path: str, create_keystore: bool
+    *, launch_description: launch.LaunchDescription, keystore_dir: str, create_keystore: bool
 ) -> Tuple['_Keystore', launch.LaunchDescription]:
-    keystore = _Keystore(keystore_path=keystore_path, create_keystore=create_keystore)
+    keystore = _Keystore(keystore_dir=keystore_dir, create_keystore=create_keystore)
 
     launch_description = launch.LaunchDescription(
         [
+            launch.actions.DeclareLaunchArgument(
+                name='__keystore', default_value=str(keystore.path)
+            ),
+            launch.actions.DeclareLaunchArgument(
+                name='__secure', default_value='true'
+            ),
             launch.actions.SetEnvironmentVariable(
                 name='ROS_SECURITY_KEYSTORE', value=str(keystore.path)
             ),
@@ -225,21 +230,21 @@ class _Keystore:
     it is destroyed alongside the _Keystore object.
     """
 
-    def __init__(self, *, keystore_path: Union[str, bytes, os.PathLike], create_keystore: bool):
+    def __init__(self, *, keystore_dir: str, create_keystore: bool):
+        keystore_path = pathlib.Path(keystore_dir)
         if not create_keystore:
-            if keystore_path == '':
+            if keystore_dir == '':
                 raise NoKeystoreProvidedError()
-            if not pathlib.Path(keystore_path).exists():
+            if not keystore_path.exists():
                 raise NonexistantKeystoreError(keystore_path)
             if not sros2.keystore.is_valid_keystore(keystore_path):
                 raise InvalidKeystoreError(keystore_path)
-
         # If keystore path is blank, create a transient keystore
-        if keystore_path == '':
+        elif keystore_dir == '':
             self._temp_keystore = TemporaryDirectory()
             self._keystore_path = pathlib.Path(self._temp_keystore.name)
         else:
-            self._keystore_path = pathlib.Path(keystore_path)
+            self._keystore_path = keystore_path
         self._keystore_path = self._keystore_path.resolve()
         # If keystore is not initialized, create a keystore
         if not self._keystore_path.is_dir():
@@ -252,7 +257,7 @@ class _Keystore:
         return self._keystore_path
 
     def __str__(self) -> str:
-        return str(self._keystore_path.resolve())
+        return str(self._keystore_path)
 
 
 class LaunchFileNameCompleter:

@@ -455,7 +455,7 @@ class Node(ExecuteProcess):
         ).replace(Node.UNSPECIFIED_NODE_NAMESPACE, '')
 
         sros2.keystore.create_enclave(
-            keystore_path=pathlib.Path(os.environ['ROS_SECURITY_KEYSTORE']),
+            keystore_path=pathlib.Path(context.launch_configurations.get('__keystore')),
             identity=self.__enclave
         )
 

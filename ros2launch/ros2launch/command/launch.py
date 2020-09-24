@@ -109,7 +109,7 @@ class LaunchCommand(CommandExtension):
             nargs='?',
             const='',
             help=('Launch using ROS 2 security features using specified keystore dir.'
-                  'Will set up a keystore if one is not specified.'),
+                  'Will set up ephemeral keystore if one is not specified.'),
         )
         try:
             arg.completer = DirectoriesCompleter()  # argcomplete is optional
@@ -119,7 +119,7 @@ class LaunchCommand(CommandExtension):
             '--no-create-keystore',
             dest='create_keystore',
             action='store_false',
-            help='Disable creating keystore automatically'
+            help='Disable automatic keystore creation and/or initialization'
         )
 
     def main(self, *, parser, args):
